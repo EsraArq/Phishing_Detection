@@ -1,0 +1,45 @@
+Metrics for SVM:
+Accuracy: 97.54%
+Precision:
+Phishing emails: 96%
+Legitimate emails: 99%
+Recall:
+Phishing emails: 99%
+Legitimate emails: 96%
+F1-score:
+Phishing emails: 98%
+Legitimate emails: 97%​​
+Metrics for RFC:
+Accuracy: 93.07%
+Precision:
+Phishing emails: 90.85%
+Legitimate emails: 95.56%
+Recall:
+Phishing emails: 95.81%
+Legitimate emails: 90.32%
+F1-score:
+Phishing emails: 93.26%
+Legitimate emails: 92.88%​​
+Dataset Information:
+Source: Public dataset on Kaggle
+Size: 18,650 websites
+7,313 phishing websites
+11,322 legitimate websites
+Types of Features: URL-based and content-based features. Detailed analysis ensured balanced representation of classes by undersampling, resulting in 7,312 instances for both phishing and legitimate categories​​.
+Feature Sets and Engineering Techniques:
+TF-IDF Vectorization: Used to transform raw email texts into structured format. This technique emphasizes the importance of words in the context of the entire email corpus​​.
+Model Configuration and Parameters:
+SVM:
+Kernel: Radial Basis Function (RBF)
+Regularization Parameter (C): 10
+Gamma: Set to 'scale'
+Parameter Tuning: Cross-validation with 16 different combinations over 5 folds (totaling 80 fits) to discover the best parameters​​.
+RFC:
+Number of Trees (n_estimators): 10
+Training Method: Each tree is constructed using a random subset of features and training data
+Parameter Tuning: Iterative trials with parameters adjusted based on cross-validation performance​​.
+Evaluation Methods:
+Validation Dataset: Split from the original data
+Metrics: Accuracy, precision, recall, and F1-score
+Tools: Python’s scikit-learn library
+Visualization: Confusion matrices used to visualize performance and pinpoint misclassifications​​.
