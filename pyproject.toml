@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "phishguard-ai"
 version = "0.1.0"
 description = "TF-IDF email threat detection with SVM and Random Forest"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

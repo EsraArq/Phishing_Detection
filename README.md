@@ -21,17 +21,20 @@ rule-based security risk indicators.
 │   └── cleaned/metrics.json   # Version 2 results; generated locally
 ├── .gitignore
 ├── pyproject.toml
+├── requirements.txt           # Pinned runtime dependencies and local package
 ├── scripts/
 │   ├── train.py               # Train Version 1 SVM and Random Forest
 │   ├── train_cleaned.py       # Clean data, train, and evaluate Version 2
 │   └── evaluate.py            # Evaluate a saved model on labeled CSV data
 ├── src/phishguard/
+│   ├── artifacts.py           # Local/HTTPS artifact loading with SHA-256 checks
 │   ├── clean_data.py          # Text normalization, conflict handling, and split
 │   ├── data.py                # Dataset loading and validation
 │   ├── evaluation.py          # Classification metrics
 │   ├── models.py              # TF-IDF SVM and Random Forest pipelines
 │   └── risk_indicators.py     # Separate rule-based warning checks
 ├── tests/
+│   ├── test_artifacts.py
 │   ├── test_phishguard.py
 │   └── test_risk_indicators.py
 ├── phishing_detection.py      # Preserved original research script
@@ -68,7 +71,7 @@ and duplicate normalized email texts.
 
 ## Installation
 
-Use Python 3.10 or newer. From the repository root, create and activate a
+Use Python 3.11 or newer. From the repository root, create and activate a
 virtual environment if needed, then install dependencies and the project in
 editable mode:
 
@@ -76,11 +79,10 @@ editable mode:
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
-python -m pip install -e .
 ```
 
-The editable install makes `phishguard` importable without setting
-`PYTHONPATH`.
+The requirements file pins versions tested with the saved models and installs
+the local `phishguard` package in editable mode.
 
 ## Train and reproduce the models
 
@@ -111,7 +113,7 @@ python -m unittest discover -s tests -v
 
 ## Run the Streamlit application
 
-With the virtual environment activated and the editable install complete:
+With the virtual environment activated and requirements installed:
 
 ```bash
 python -m streamlit run app/streamlit_app.py
@@ -121,6 +123,60 @@ The interface defaults to **Version 2 — Cleaned SVM** and also supports
 **Version 1 — Original SVM**. Both pipelines classify the same pasted email
 content; the displayed result is a machine-learning prediction, not a
 guarantee that an email is safe.
+
+## Streamlit Community Cloud deployment
+
+The deployment target is Python 3.12. The exact versions in
+`requirements.txt` were tested together on Python 3.12.15, including loading
+and predicting with both saved SVM pipelines. Select Python 3.12 in the
+Community Cloud app settings.
+
+The dataset, trained models, and evaluation reports are not stored in Git.
+The app first looks for expected files in the local `models/` and `results/`
+directories. If an artifact is absent, it downloads that artifact from an
+optional public HTTPS base URL configured as a Streamlit secret. Every local
+or downloaded model and report is verified against its pinned SHA-256 digest
+before use. Downloads reject non-HTTPS URLs and redirects, have a 20-second
+timeout and a 64 MiB size limit, and are cached by Streamlit. Redirects are
+allowed only over HTTPS to the configured artifact host or GitHub's known
+release-asset hosts. The app does not download the Kaggle dataset or train
+models at startup.
+
+After distribution rights for the trained artifacts have been confirmed,
+publish the two SVMs and their metric reports as assets in a GitHub Release.
+Use these exact asset filenames:
+
+```text
+svm.joblib
+cleaned-svm.joblib
+metrics.json
+cleaned-metrics.json
+```
+
+In Streamlit Community Cloud, create the app from repository
+`EsraArq/Phishing_Detection`, branch `phishguard-development`, and entrypoint
+`app/streamlit_app.py`. In Advanced settings, select Python 3.12 and set this
+secret to the release's HTTPS download directory (with or without a trailing
+slash):
+
+```toml
+PHISHGUARD_ARTIFACT_BASE_URL = "https://github.com/EsraArq/Phishing_Detection/releases/download/RELEASE_TAG"
+```
+
+Do not create a release or upload artifacts until distribution rights are
+confirmed. Whether the Kaggle dataset's reported LGPL-3.0 license permits
+redistribution of models trained on its contents has not been independently
+verified. The application uses pickle-based `joblib` model files; only publish
+artifacts produced and verified by this project. Fixed digests ensure that
+unexpected or tampered files are rejected.
+
+When running locally, no secret is needed if all four app artifacts are
+present in their normal locations. To test HTTPS downloads locally, place the
+base URL in `.streamlit/secrets.toml`; that file is excluded from Git.
+
+**Privacy notice:** Email text submitted to a deployed instance is processed
+by the hosted application. Do not submit confidential or sensitive email
+content.
 
 ### Version 2 evaluation results
 

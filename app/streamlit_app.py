@@ -1,22 +1,25 @@
+import io
 import json
+import os
 import pickle
 from pathlib import Path
 
 import joblib
 import streamlit as st
 
+from phishguard.artifacts import ArtifactDownloadError, load_artifact_bytes
 from phishguard.risk_indicators import detect_security_risk_indicators
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 MODEL_VERSIONS = {
     "Version 2 — Cleaned SVM": {
-        "model_path": PROJECT_ROOT / "models" / "cleaned" / "svm.joblib",
-        "metrics_path": PROJECT_ROOT / "results" / "cleaned" / "metrics.json",
+        "model_artifact": "models/cleaned/svm.joblib",
+        "metrics_artifact": "results/cleaned/metrics.json",
         "version": "Version 2 (cleaned dataset)",
     },
     "Version 1 — Original SVM": {
-        "model_path": PROJECT_ROOT / "models" / "svm.joblib",
-        "metrics_path": PROJECT_ROOT / "results" / "metrics.json",
+        "model_artifact": "models/svm.joblib",
+        "metrics_artifact": "results/metrics.json",
         "version": "Version 1 (original dataset)",
     },
 }
@@ -28,27 +31,42 @@ st.set_page_config(
 )
 
 
+def get_artifact_base_url() -> str | None:
+    """Read the optional public artifact base URL from env or Streamlit secrets."""
+    base_url = os.environ.get("PHISHGUARD_ARTIFACT_BASE_URL")
+    if base_url is None:
+        try:
+            base_url = st.secrets["PHISHGUARD_ARTIFACT_BASE_URL"]
+        except (FileNotFoundError, KeyError):
+            return None
+    if not isinstance(base_url, str) or not base_url.strip():
+        raise ValueError("PHISHGUARD_ARTIFACT_BASE_URL must be a non-empty URL.")
+    return base_url.strip()
+
+
 @st.cache_resource
-def load_svm_model(model_path: str):
-    return joblib.load(model_path)
+def load_svm_model(artifact_name: str, artifact_base_url: str | None):
+    model_bytes = load_artifact_bytes(artifact_name, PROJECT_ROOT, artifact_base_url)
+    return joblib.load(io.BytesIO(model_bytes))
 
 
 @st.cache_data
-def load_research_metrics(metrics_path: str) -> dict:
-    with Path(metrics_path).open(encoding="utf-8") as metrics_file:
-        return json.load(metrics_file)
+def load_research_metrics(
+    artifact_name: str, artifact_base_url: str | None
+) -> dict:
+    metrics_bytes = load_artifact_bytes(artifact_name, PROJECT_ROOT, artifact_base_url)
+    return json.loads(metrics_bytes)
 
 
 def render_research_results() -> None:
     st.header("Research Results")
     try:
+        artifact_base_url = get_artifact_base_url()
         version_reports = {}
         for choice, version in MODEL_VERSIONS.items():
-            report_path = version["metrics_path"]
-            if not report_path.is_file():
-                st.error(f"Research metrics file not found: {report_path}")
-                return
-            version_reports[choice] = load_research_metrics(str(report_path))
+            version_reports[choice] = load_research_metrics(
+                version["metrics_artifact"], artifact_base_url
+            )
 
         rows = []
         for choice, results in version_reports.items():
@@ -72,7 +90,13 @@ def render_research_results() -> None:
                     "False negatives": model_results["confusion_matrix"][1][0],
                 }
             )
-    except (OSError, json.JSONDecodeError, KeyError, TypeError) as error:
+    except (
+        OSError,
+        ValueError,
+        json.JSONDecodeError,
+        KeyError,
+        TypeError,
+    ) as error:
         st.error(f"Unable to read the saved research metrics: {error}")
         return
 
@@ -128,6 +152,10 @@ st.write(
     "Choose either saved SVM version to analyze email text. Predictions are "
     "machine-learning classifications, not a guarantee of email safety."
 )
+st.caption(
+    "Privacy notice: submitted email text is processed by this hosted application. "
+    "Do not submit confidential or sensitive email content."
+)
 
 selected_version = st.selectbox(
     "SVM model version",
@@ -136,6 +164,11 @@ selected_version = st.selectbox(
 )
 selected_model = MODEL_VERSIONS[selected_version]
 st.caption(f"Currently selected: **{selected_model['version']}**")
+try:
+    artifact_base_url = get_artifact_base_url()
+except ValueError as error:
+    artifact_base_url = None
+    st.error(f"Artifact configuration is invalid: {error}")
 
 email_text = st.text_area(
     "Paste email content",
@@ -146,11 +179,18 @@ email_text = st.text_area(
 if st.button("Analyze Email", type="primary"):
     if not email_text.strip():
         st.warning("Enter email content before analyzing.")
-    elif not selected_model["model_path"].is_file():
-        st.error(f"Trained SVM model not found: {selected_model['model_path']}")
+    elif artifact_base_url is None and not (
+        PROJECT_ROOT / selected_model["model_artifact"]
+    ).is_file():
+        st.error(
+            f"Trained SVM model not found: {selected_model['model_artifact']}. "
+            "Configure PHISHGUARD_ARTIFACT_BASE_URL to enable HTTPS downloads."
+        )
     else:
         try:
-            model = load_svm_model(str(selected_model["model_path"]))
+            model = load_svm_model(
+                selected_model["model_artifact"], artifact_base_url
+            )
         except (
             OSError,
             EOFError,
