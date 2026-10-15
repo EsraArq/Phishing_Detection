@@ -7,7 +7,10 @@ from pathlib import Path
 import joblib
 import streamlit as st
 
-from phishguard.artifacts import ArtifactDownloadError, load_artifact_bytes
+from phishguard.artifacts import (
+    DEFAULT_HF_REVISION,
+    load_artifact_bytes,
+)
 from phishguard.risk_indicators import detect_security_risk_indicators
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -44,28 +47,76 @@ def get_artifact_base_url() -> str | None:
     return base_url.strip()
 
 
+def _get_hf_setting(name: str) -> str | None:
+    value = os.environ.get(name)
+    if value is None:
+        try:
+            value = st.secrets[name]
+        except (FileNotFoundError, KeyError):
+            return None
+    if not isinstance(value, str):
+        raise ValueError(f"{name} must be a string.")
+    return value.strip() or None
+
+
+def get_hf_token() -> str | None:
+    """Read the private Hub token without exposing it in application output."""
+    return _get_hf_setting("HF_TOKEN")
+
+
+def get_hf_revision() -> str:
+    """Read the optional immutable Hub revision; default to the repository branch."""
+    return _get_hf_setting("PHISHGUARD_HF_REVISION") or DEFAULT_HF_REVISION
+
+
 @st.cache_resource
-def load_svm_model(artifact_name: str, artifact_base_url: str | None):
-    model_bytes = load_artifact_bytes(artifact_name, PROJECT_ROOT, artifact_base_url)
+def load_svm_model(
+    artifact_name: str,
+    artifact_base_url: str | None,
+    hf_revision: str,
+    hf_token: str | None,
+):
+    model_bytes = load_artifact_bytes(
+        artifact_name,
+        PROJECT_ROOT,
+        artifact_base_url,
+        hf_token=hf_token,
+        hf_revision=hf_revision,
+    )
     return joblib.load(io.BytesIO(model_bytes))
 
 
 @st.cache_data
 def load_research_metrics(
-    artifact_name: str, artifact_base_url: str | None
+    artifact_name: str,
+    artifact_base_url: str | None,
+    hf_revision: str,
+    hf_token: str | None,
 ) -> dict:
-    metrics_bytes = load_artifact_bytes(artifact_name, PROJECT_ROOT, artifact_base_url)
+    metrics_bytes = load_artifact_bytes(
+        artifact_name,
+        PROJECT_ROOT,
+        artifact_base_url,
+        hf_token=hf_token,
+        hf_revision=hf_revision,
+    )
     return json.loads(metrics_bytes)
 
 
-def render_research_results() -> None:
+def render_research_results(
+    artifact_base_url: str | None,
+    hf_revision: str,
+    hf_token: str | None,
+) -> None:
     st.header("Research Results")
     try:
-        artifact_base_url = get_artifact_base_url()
         version_reports = {}
         for choice, version in MODEL_VERSIONS.items():
             version_reports[choice] = load_research_metrics(
-                version["metrics_artifact"], artifact_base_url
+                version["metrics_artifact"],
+                artifact_base_url,
+                hf_revision,
+                hf_token,
             )
 
         rows = []
@@ -166,8 +217,12 @@ selected_model = MODEL_VERSIONS[selected_version]
 st.caption(f"Currently selected: **{selected_model['version']}**")
 try:
     artifact_base_url = get_artifact_base_url()
+    hf_token = get_hf_token()
+    hf_revision = get_hf_revision()
 except ValueError as error:
     artifact_base_url = None
+    hf_token = None
+    hf_revision = DEFAULT_HF_REVISION
     st.error(f"Artifact configuration is invalid: {error}")
 
 email_text = st.text_area(
@@ -179,17 +234,21 @@ email_text = st.text_area(
 if st.button("Analyze Email", type="primary"):
     if not email_text.strip():
         st.warning("Enter email content before analyzing.")
-    elif artifact_base_url is None and not (
+    elif artifact_base_url is None and hf_token is None and not (
         PROJECT_ROOT / selected_model["model_artifact"]
     ).is_file():
         st.error(
             f"Trained SVM model not found: {selected_model['model_artifact']}. "
-            "Configure PHISHGUARD_ARTIFACT_BASE_URL to enable HTTPS downloads."
+            "Set HF_TOKEN in Streamlit secrets or the environment to access the "
+            "private Hugging Face repository."
         )
     else:
         try:
             model = load_svm_model(
-                selected_model["model_artifact"], artifact_base_url
+                selected_model["model_artifact"],
+                artifact_base_url,
+                hf_revision,
+                hf_token,
             )
         except (
             OSError,
@@ -236,4 +295,6 @@ if st.button("Analyze Email", type="primary"):
                 )
 
 st.divider()
-render_research_results()
+render_research_results(
+    artifact_base_url, hf_revision, hf_token
+)

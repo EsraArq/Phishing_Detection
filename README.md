@@ -27,7 +27,7 @@ rule-based security risk indicators.
 │   ├── train_cleaned.py       # Clean data, train, and evaluate Version 2
 │   └── evaluate.py            # Evaluate a saved model on labeled CSV data
 ├── src/phishguard/
-│   ├── artifacts.py           # Local/HTTPS artifact loading with SHA-256 checks
+│   ├── artifacts.py           # Local/Hub/HTTPS artifact loading with SHA-256 checks
 │   ├── clean_data.py          # Text normalization, conflict handling, and split
 │   ├── data.py                # Dataset loading and validation
 │   ├── evaluation.py          # Classification metrics
@@ -132,19 +132,17 @@ and predicting with both saved SVM pipelines. Select Python 3.12 in the
 Community Cloud app settings.
 
 The dataset, trained models, and evaluation reports are not stored in Git.
-The app first looks for expected files in the local `models/` and `results/`
-directories. If an artifact is absent, it downloads that artifact from an
-optional public HTTPS base URL configured as a Streamlit secret. Every local
-or downloaded model and report is verified against its pinned SHA-256 digest
-before use. Downloads reject non-HTTPS URLs and redirects, have a 20-second
-timeout and a 64 MiB size limit, and are cached by Streamlit. Redirects are
-allowed only over HTTPS to the configured artifact host or GitHub's known
-release-asset hosts. The app does not download the Kaggle dataset or train
-models at startup.
+The app first looks for artifacts in local `models/` and `results/`
+directories. If an artifact is absent, it can download from the private
+Hugging Face model repository `EsraArq/PhishGuard-AI-Models` using
+`huggingface_hub`. Every local or downloaded model and report is verified
+against its pinned SHA-256 digest before use. Hub downloads use the pinned
+revision setting and the Hub client's cache; the app does not download the
+Kaggle dataset or train models at startup. The existing optional HTTPS
+artifact-base-URL mechanism remains available when no Hugging Face token is
+configured.
 
-After distribution rights for the trained artifacts have been confirmed,
-publish the two SVMs and their metric reports as assets in a GitHub Release.
-Use these exact asset filenames:
+The repository must contain these exact filenames:
 
 ```text
 svm.joblib
@@ -155,24 +153,38 @@ cleaned-metrics.json
 
 In Streamlit Community Cloud, create the app from repository
 `EsraArq/Phishing_Detection`, branch `phishguard-development`, and entrypoint
-`app/streamlit_app.py`. In Advanced settings, select Python 3.12 and set this
-secret to the release's HTTPS download directory (with or without a trailing
-slash):
+`app/streamlit_app.py`. In Advanced settings, select Python 3.12. Add the
+following values to the app's Secrets configuration (replace the placeholder
+revision with a full commit SHA from the private model repository):
 
 ```toml
-PHISHGUARD_ARTIFACT_BASE_URL = "https://github.com/EsraArq/Phishing_Detection/releases/download/RELEASE_TAG"
+HF_TOKEN = "your-read-only-hugging-face-token"
+PHISHGUARD_HF_REVISION = "full-model-repository-commit-sha"
 ```
 
-Do not create a release or upload artifacts until distribution rights are
-confirmed. Whether the Kaggle dataset's reported LGPL-3.0 license permits
-redistribution of models trained on its contents has not been independently
-verified. The application uses pickle-based `joblib` model files; only publish
-artifacts produced and verified by this project. Fixed digests ensure that
-unexpected or tampered files are rejected.
+Create a Hugging Face read token with access only to this private model
+repository. The token can alternatively be supplied through the `HF_TOKEN`
+environment variable when running outside Streamlit Cloud. Set
+`PHISHGUARD_HF_REVISION` in Streamlit Secrets or the environment to choose the
+repository revision; it defaults to `main`, but a full commit SHA is
+recommended to make deployment reproducible. The token is only passed to the
+Hub client and is not rendered or logged by the app. Do not put it in source
+code, README, or a committed secrets file.
+
+Do not upload artifacts until distribution rights have been confirmed.
+Whether the Kaggle dataset's reported LGPL-3.0 license permits redistribution
+of models trained on its contents has not been independently verified.
+Private hosting does not resolve licensing obligations. The application uses
+pickle-based `joblib` model files; only load artifacts produced and verified
+by this project. Fixed digests ensure that unexpected or tampered files are
+rejected.
 
 When running locally, no secret is needed if all four app artifacts are
-present in their normal locations. To test HTTPS downloads locally, place the
-base URL in `.streamlit/secrets.toml`; that file is excluded from Git.
+present in their normal locations. To test private Hub downloads locally, set
+`HF_TOKEN` and optionally `PHISHGUARD_HF_REVISION` in the environment or in
+`.streamlit/secrets.toml`; that file is excluded from Git. The existing
+`PHISHGUARD_ARTIFACT_BASE_URL` option can still be used for public HTTPS
+artifacts.
 
 **Privacy notice:** Email text submitted to a deployed instance is processed
 by the hosted application. Do not submit confidential or sensitive email

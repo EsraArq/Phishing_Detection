@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 
 from phishguard.artifacts import (
     ARTIFACT_SHA256,
+    DEFAULT_HF_REPO_ID,
     ArtifactDownloadError,
     ArtifactIntegrityError,
     _SafeRedirectHandler,
@@ -62,6 +63,73 @@ class ArtifactLoaderTests(unittest.TestCase):
             "https://artifacts.example.test/release/svm.joblib",
         )
         self.assertEqual(opener.open.call_args.kwargs["timeout"], 7)
+
+    def test_downloads_and_verifies_artifact_from_private_hugging_face_repo(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            cached_artifact = Path(temporary_directory) / "cached-svm.joblib"
+            cached_artifact.write_bytes(self.valid_content)
+
+            with patch(
+                "phishguard.artifacts.hf_hub_download",
+                return_value=str(cached_artifact),
+            ) as download:
+                result = load_artifact_bytes(
+                    self.artifact_name,
+                    Path(temporary_directory) / "project",
+                    hf_token="test-token-not-real",
+                    hf_revision="0123456789abcdef",
+                )
+
+        self.assertEqual(result, self.valid_content)
+        download.assert_called_once_with(
+            repo_id=DEFAULT_HF_REPO_ID,
+            filename="svm.joblib",
+            repo_type="model",
+            revision="0123456789abcdef",
+            token="test-token-not-real",
+            etag_timeout=20,
+        )
+
+    def test_rejects_hugging_face_artifact_with_wrong_checksum(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            cached_artifact = Path(temporary_directory) / "cached-svm.joblib"
+            cached_artifact.write_bytes(b"tampered artifact")
+
+            with patch(
+                "phishguard.artifacts.hf_hub_download",
+                return_value=str(cached_artifact),
+            ):
+                with self.assertRaises(ArtifactIntegrityError):
+                    load_artifact_bytes(
+                        self.artifact_name,
+                        Path(temporary_directory) / "project",
+                        hf_token="test-token-not-real",
+                    )
+
+    def test_reports_missing_hugging_face_token_without_attempting_download(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            with patch("phishguard.artifacts.hf_hub_download") as download:
+                with self.assertRaisesRegex(FileNotFoundError, "HF_TOKEN"):
+                    load_artifact_bytes(
+                        self.artifact_name, Path(temporary_directory)
+                    )
+
+        download.assert_not_called()
+
+    def test_hides_token_when_hugging_face_download_fails(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            with patch(
+                "phishguard.artifacts.hf_hub_download",
+                side_effect=OSError("failure containing private details"),
+            ):
+                with self.assertRaises(ArtifactDownloadError) as error:
+                    load_artifact_bytes(
+                        self.artifact_name,
+                        Path(temporary_directory),
+                        hf_token="test-token-not-real",
+                    )
+
+        self.assertNotIn("test-token-not-real", str(error.exception))
 
     def test_rejects_download_with_wrong_checksum(self):
         with tempfile.TemporaryDirectory() as temporary_directory:

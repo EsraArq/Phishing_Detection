@@ -1,4 +1,4 @@
-"""Load pinned model and evaluation artifacts from disk or HTTPS."""
+"""Load pinned model and evaluation artifacts from disk, Hugging Face, or HTTPS."""
 
 from __future__ import annotations
 
@@ -7,6 +7,10 @@ from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urljoin, urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
+
+from huggingface_hub import hf_hub_download
+from huggingface_hub.errors import HfHubHTTPError
+from requests.exceptions import RequestException
 
 
 ARTIFACT_SHA256 = {
@@ -23,6 +27,8 @@ ARTIFACT_REMOTE_NAMES = {
 }
 DOWNLOAD_TIMEOUT_SECONDS = 20
 MAX_ARTIFACT_BYTES = 64 * 1024 * 1024
+DEFAULT_HF_REPO_ID = "EsraArq/PhishGuard-AI-Models"
+DEFAULT_HF_REVISION = "main"
 
 
 class ArtifactIntegrityError(ValueError):
@@ -89,6 +95,10 @@ def load_artifact_bytes(
     project_root: Path,
     artifact_base_url: str | None = None,
     timeout: float = DOWNLOAD_TIMEOUT_SECONDS,
+    *,
+    hf_token: str | None = None,
+    hf_revision: str = DEFAULT_HF_REVISION,
+    hf_repo_id: str = DEFAULT_HF_REPO_ID,
 ) -> bytes:
     """Load one known artifact and verify it against its pinned SHA-256 digest."""
     if artifact_name not in ARTIFACT_SHA256:
@@ -109,9 +119,35 @@ def load_artifact_bytes(
             raise ArtifactIntegrityError(f"Artifact exceeds size limit: {artifact_name}.")
         return _verify_artifact(artifact_name, content)
 
+    if hf_token is not None:
+        if not hf_token.strip():
+            raise ValueError("HF_TOKEN must be a non-empty string.")
+        if not hf_revision.strip():
+            raise ValueError("Hugging Face revision must be a non-empty string.")
+        try:
+            downloaded_path = hf_hub_download(
+                repo_id=hf_repo_id,
+                filename=ARTIFACT_REMOTE_NAMES[artifact_name],
+                repo_type="model",
+                revision=hf_revision,
+                token=hf_token,
+                etag_timeout=timeout,
+            )
+            with Path(downloaded_path).open("rb") as artifact_file:
+                content = artifact_file.read(MAX_ARTIFACT_BYTES + 1)
+        except (HfHubHTTPError, RequestException, OSError, TimeoutError):
+            raise ArtifactDownloadError(
+                f"Unable to download artifact {artifact_name} from Hugging Face."
+            ) from None
+        if len(content) > MAX_ARTIFACT_BYTES:
+            raise ArtifactDownloadError(
+                f"Downloaded artifact exceeds size limit: {artifact_name}."
+            )
+        return _verify_artifact(artifact_name, content)
+
     if artifact_base_url is None:
         raise FileNotFoundError(
-            f"Artifact {artifact_name} is missing locally and no artifact URL is configured."
+            f"Artifact {artifact_name} is missing locally and no HF_TOKEN or artifact URL is configured."
         )
 
     base_url = _validate_base_url(artifact_base_url)
