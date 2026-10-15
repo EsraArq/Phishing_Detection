@@ -1,0 +1,40 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+env/
+
+# Local datasets, generated model/evaluation artifacts, and private configuration
+/data/
+/models/
+/results/
+
+# Environment and secret configuration
+.env
+.env.*
+!.env.example
+secrets.txt
+secrets.*
+credentials*
+*credentials*
+.aws/
+.ssh/
+.config/gcloud/
+.kaggle/kaggle.json
+.netrc
+.git-credentials
+.npmrc
+.pypirc
+
+# Private keys and certificates
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.token
+
+.DS_Store
