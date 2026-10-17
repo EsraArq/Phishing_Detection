@@ -38,6 +38,43 @@ class SecurityRiskIndicatorTests(unittest.TestCase):
         )
         self.assertTrue(all(indicator["evidence"] for indicator in indicators))
 
+    def test_detects_reply_requests_for_password_and_security_codes(self):
+        emails = (
+            "URGENT: Your account will be suspended within 24 hours. To prevent "
+            "losing access, reply immediately with your password and MFA "
+            "verification code.",
+            "Reply with your password to restore access to your fictional account.",
+            "Reply promptly with your MFA code to verify your fictional sign-in.",
+            "Please reply directly with the verification code to continue.",
+            "Reply now with your recovery code to unlock the fictional account.",
+        )
+
+        for email in emails:
+            with self.subTest(email=email):
+                categories = {
+                    item["category"]
+                    for item in detect_security_risk_indicators(email)
+                }
+                self.assertIn("Password or credential disclosure", categories)
+
+    def test_security_awareness_mentions_do_not_trigger_credential_indicator(self):
+        emails = (
+            "Security awareness reminder: passwords and MFA verification codes "
+            "are secrets; never share them in a message.",
+            "Security training note: recovery codes and passwords should be "
+            "stored securely. Legitimate support will not ask for MFA codes.",
+        )
+
+        for email in emails:
+            with self.subTest(email=email):
+                self.assertNotIn(
+                    "Password or credential disclosure",
+                    {
+                        item["category"]
+                        for item in detect_security_risk_indicators(email)
+                    },
+                )
+
     def test_legitimate_and_negated_security_guidance_does_not_trigger(self):
         email = (
             "Your course registration is confirmed. For your safety, do not "

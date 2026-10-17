@@ -1,6 +1,7 @@
 import unittest
 
 from phishguard.presentation import build_analysis_presentation
+from phishguard.risk_indicators import detect_security_risk_indicators
 
 
 class AnalysisPresentationTests(unittest.TestCase):
@@ -64,6 +65,26 @@ class AnalysisPresentationTests(unittest.TestCase):
             presentation["no_indicators_message"],
         )
         self.assertTrue(presentation["recommended_actions"])
+
+    def test_reply_with_password_and_mfa_message_shows_indicator_and_action(self):
+        email = (
+            "URGENT: Your account will be suspended within 24 hours. To prevent "
+            "losing access, reply immediately with your password and MFA "
+            "verification code."
+        )
+        presentation = build_analysis_presentation(
+            "Phishing Email",
+            detect_security_risk_indicators(email),
+        )
+
+        self.assertIn(
+            "Password or credential disclosure",
+            [item["category"] for item in presentation["indicators"]],
+        )
+        self.assertIn(
+            "Do not share passwords, MFA codes, or recovery codes in a message.",
+            presentation["recommended_actions"],
+        )
 
     def test_unknown_model_label_raises_generic_error(self):
         with self.assertRaisesRegex(ValueError, "unsupported classification"):

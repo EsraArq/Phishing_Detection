@@ -9,8 +9,9 @@ MACRO_ACTION_PATTERN = re.compile(
     re.IGNORECASE,
 )
 PASSWORD_DISCLOSURE_PATTERN = re.compile(
-    r"\b(?:send|share|provide|reply\s+with|email|tell|disclose|give|submit)\s+"
-    r"(?:(?:me|us)\s+)?(?:your\s+)?"
+    r"\b(?:send|share|provide|reply\s+(?:(?:immediately|promptly|directly|now)\s+)?with|"
+    r"email|tell|disclose|give|submit)\s+"
+    r"(?:(?:me|us)\s+)?(?:(?:your|the)\s+)?"
     r"(?:(?:current|student|account|login|email|one[- ]time|mfa|"
     r"recovery|backup|verification|authentication)\s+){0,2}"
     r"(?:usernames?(?:\s*,\s*(?:and\s+)?passwords?)?|passwords?|"
@@ -128,7 +129,8 @@ ACCOUNT_THREAT_PATTERN = re.compile(
     re.IGNORECASE,
 )
 REQUESTED_CREDENTIAL_OR_PAYMENT_PATTERN = re.compile(
-    r"(?:\b(?:reply\s+with|send|share|provide|enter|submit|type|verify|confirm|"
+    r"(?:\b(?:reply\s+(?:(?:immediately|promptly|directly|now)\s+)?with|"
+    r"send|share|provide|enter|submit|type|verify|confirm|"
     r"sign\s*in|log\s*in|authenticate|pay|wire|transfer|purchase|buy)\b"
     r"[^.!?\n]{0,160}\b(?:passwords?|passcodes?|credentials?|usernames?|"
     r"(?:mfa|recovery|verification|one[- ]time)\s+(?:codes?|tokens?)|"
