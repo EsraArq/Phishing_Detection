@@ -105,6 +105,18 @@ python scripts/train.py
 This writes to `models/` and `results/`; it does not create the cleaned
 Version 2 artifacts. Both commands require the dataset described above.
 
+## Version 3 privacy preprocessing (pre-training phase)
+
+The isolated `phishguard.v3_preprocessing` module provides deterministic
+masking for email addresses, URLs, phone numbers, IP addresses, and common
+account, payment, government-ID, and IBAN values. It preserves surrounding
+message text and emits category markers that the Version 3 TF-IDF vectorizer
+keeps as individual features. This preprocessing is not connected to either
+existing training script or model. Its rule-based detection cannot guarantee
+that every identifier is removed, and masking can affect phishing-detection
+performance; the separate Version 3 training and evaluation plan must measure
+both before any model is produced.
+
 Run the full unit test suite with:
 
 ```bash
