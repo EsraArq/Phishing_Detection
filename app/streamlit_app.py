@@ -11,6 +11,7 @@ from phishguard.artifacts import (
     DEFAULT_HF_REVISION,
     load_artifact_bytes,
 )
+from phishguard.presentation import build_analysis_presentation
 from phishguard.risk_indicators import detect_security_risk_indicators
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -147,8 +148,11 @@ def render_research_results(
         json.JSONDecodeError,
         KeyError,
         TypeError,
-    ) as error:
-        st.error(f"Unable to read the saved research metrics: {error}")
+    ):
+        st.error(
+            "Unable to read the saved research metrics. Check the local "
+            "artifact files and configuration."
+        )
         return
 
     st.dataframe(
@@ -257,42 +261,57 @@ if st.button("Analyze Email", type="primary"):
             ImportError,
             AttributeError,
             ValueError,
-        ) as error:
-            st.error(f"Unable to load the saved SVM model: {error}")
+        ):
+            st.error(
+                "Unable to load the saved SVM model. Check that the configured "
+                "artifact is available and passes its integrity check."
+            )
         else:
             try:
                 prediction = model.predict([email_text])[0]
-            except (ValueError, TypeError, RuntimeError, AttributeError) as error:
-                st.error(f"The model could not analyze this email: {error}")
+            except (ValueError, TypeError, RuntimeError, AttributeError):
+                st.error(
+                    "The model could not analyze this message. Review the input "
+                    "and try again."
+                )
             else:
-                if prediction == "Phishing Email":
-                    st.error("Potential Phishing Email")
-                elif prediction == "Safe Email":
-                    st.success("Likely Legitimate Email")
+                if prediction not in {"Phishing Email", "Safe Email"}:
+                    st.error("The model returned an unsupported classification.")
+                    st.stop()
+                presentation = build_analysis_presentation(
+                    prediction,
+                    detect_security_risk_indicators(email_text),
+                )
+                st.subheader("Machine-Learning Prediction")
+                if presentation["is_phishing"]:
+                    st.warning(presentation["model_result"])
                 else:
-                    st.error(f"The model returned an unsupported label: {prediction}")
+                    st.info(presentation["model_result"])
                 st.info(
                     f"{selected_model['version']} provides a machine-learning "
                     "prediction, not a guarantee of email safety. Verify suspicious "
                     "messages through trusted channels."
                 )
                 st.subheader("Security Risk Indicators")
-                indicators = detect_security_risk_indicators(email_text)
-                if indicators:
+                if presentation["indicators"]:
                     st.warning(
                         "These rule-based warnings are separate from the model "
                         "prediction and can appear with either classification."
                     )
-                    for indicator in indicators:
+                    for indicator in presentation["indicators"]:
                         st.markdown(f"**{indicator['category']}**")
                         st.write(indicator["explanation"])
-                        st.code(indicator["evidence"], language=None)
+                    if presentation["caution"]:
+                        st.error(presentation["caution"])
                 else:
-                    st.success("No configured security risk indicator was detected.")
+                    st.info(presentation["no_indicators_message"])
                 st.caption(
-                    "Checks cover selected macro and credential-request patterns "
-                    "only; absence of a warning does not establish that an email is safe."
+                    "Indicators cover selected suspicious behavior only and do "
+                    "not replace the machine-learning prediction."
                 )
+                st.subheader("Recommended Actions")
+                for action in presentation["recommended_actions"]:
+                    st.markdown(f"- {action}")
 
 st.divider()
 render_research_results(

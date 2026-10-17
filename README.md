@@ -32,6 +32,7 @@ rule-based security risk indicators.
 │   ├── data.py                # Dataset loading and validation
 │   ├── evaluation.py          # Classification metrics
 │   ├── models.py              # TF-IDF SVM and Random Forest pipelines
+│   ├── presentation.py        # Privacy-conscious prediction and warning wording
 │   └── risk_indicators.py     # Separate rule-based warning checks
 ├── tests/
 │   ├── test_artifacts.py
@@ -181,97 +182,110 @@ python -m unittest discover -s tests -v
 
 ## Run the Streamlit application
 
-With the virtual environment activated and requirements installed:
+From the repository root, run the app using the project environment:
 
 ```bash
-python -m streamlit run app/streamlit_app.py
+.venv/bin/streamlit run app/streamlit_app.py
 ```
 
-The interface defaults to **Version 2 — Cleaned SVM** and also supports
-**Version 1 — Original SVM**. Both pipelines classify the same pasted email
-content; the displayed result is a machine-learning prediction, not a
-guarantee that an email is safe.
+The equivalent command after activating `.venv` is
+`python -m streamlit run app/streamlit_app.py`. The application supports the
+saved Version 1 original SVM and Version 2 cleaned SVM; it defaults to Version
+2. Version 3 is experimental and is not integrated into the app.
 
-## Streamlit Community Cloud deployment
+### Application architecture
 
-The deployment target is Python 3.12. The exact versions in
-`requirements.txt` were tested together on Python 3.12.15, including loading
-and predicting with both saved SVM pipelines. Select Python 3.12 in the
-Community Cloud app settings.
+1. Streamlit accepts email text in memory and passes it to the selected
+   existing SVM pipeline. The application does not train models at startup.
+2. The artifact loader reads local model files first. If a model is absent, it
+   can use the configured private Hugging Face repository or optional HTTPS
+   artifact source. The bytes are checked against a pinned SHA-256 digest
+   before `joblib` deserializes the model.
+3. The SVM classification is displayed separately from the independent
+   Security Risk Indicators. Indicator matches do not override the prediction.
+   A likely legitimate classification alongside an indicator triggers a
+   prominent caution. Indicator details use generic explanations, not matched
+   email excerpts.
+4. Recommended Actions are selected from detected indicator categories.
+   Neither a likely legitimate classification nor an empty indicator list
+   guarantees safety.
+5. Aggregate research metrics are loaded and shown separately from an
+   individual email analysis.
 
-The dataset, trained models, and evaluation reports are not stored in Git.
-The app first looks for artifacts in local `models/` and `results/`
-directories. If an artifact is absent, it can download from the private
-Hugging Face model repository `EsraArq/PhishGuard-AI-Models` using
-`huggingface_hub`. Every local or downloaded model and report is verified
-against its pinned SHA-256 digest before use. Hub downloads use the pinned
-revision setting and the Hub client's cache; the app does not download the
-Kaggle dataset or train models at startup. The existing optional HTTPS
-artifact-base-URL mechanism remains available when no Hugging Face token is
-configured.
+The app reports generic errors without echoing submitted message text. The
+local privacy notice advises against submitting confidential email content.
+Hosting infrastructure and provider-level telemetry are outside the app's
+control.
 
-The repository must contain these exact filenames:
+## Model artifact hosting status
 
-```text
-svm.joblib
-cleaned-svm.joblib
-metrics.json
-cleaned-metrics.json
-```
+**Public model hosting and public deployment are on hold** pending verification
+of dataset provenance, licensing, and redistribution rights for the source
+emails and derived model artifacts. Kaggle currently reports LGPL-3.0 for the
+dataset, but that metadata and the rights to all included email text have not
+been independently verified. Private hosting does not resolve those questions.
+Do not upload models or deploy this app publicly until the review is complete.
 
-In Streamlit Community Cloud, create the app from repository
-`EsraArq/Phishing_Detection`, branch `phishguard-development`, and entrypoint
-`app/streamlit_app.py`. In Advanced settings, select Python 3.12. Add the
-following values to the app's Secrets configuration (replace the placeholder
-revision with a full commit SHA from the private model repository):
-
-```toml
-HF_TOKEN = "your-read-only-hugging-face-token"
-PHISHGUARD_HF_REVISION = "full-model-repository-commit-sha"
-```
-
-Create a Hugging Face read token with access only to this private model
-repository. The token can alternatively be supplied through the `HF_TOKEN`
-environment variable when running outside Streamlit Cloud. Set
-`PHISHGUARD_HF_REVISION` in Streamlit Secrets or the environment to choose the
-repository revision; it defaults to `main`, but a full commit SHA is
-recommended to make deployment reproducible. The token is only passed to the
-Hub client and is not rendered or logged by the app. Do not put it in source
-code, README, or a committed secrets file.
-
-Do not upload artifacts until distribution rights have been confirmed.
-Whether the Kaggle dataset's reported LGPL-3.0 license permits redistribution
-of models trained on its contents has not been independently verified.
-Private hosting does not resolve licensing obligations. The application uses
-pickle-based `joblib` model files; only load artifacts produced and verified
-by this project. Fixed digests ensure that unexpected or tampered files are
-rejected.
-
-When running locally, no secret is needed if all four app artifacts are
-present in their normal locations. To test private Hub downloads locally, set
-`HF_TOKEN` and optionally `PHISHGUARD_HF_REVISION` in the environment or in
-`.streamlit/secrets.toml`; that file is excluded from Git. The existing
-`PHISHGUARD_ARTIFACT_BASE_URL` option can still be used for public HTTPS
-artifacts.
-
-**Privacy notice:** Email text submitted to a deployed instance is processed
-by the hosted application. Do not submit confidential or sensitive email
-content.
+For local inference, put the expected model and metrics files in their normal
+ignored `models/` and `results/` locations; no credentials are needed when
+those files are present. If authorized private Hub access is needed, set
+`HF_TOKEN` and optionally `PHISHGUARD_HF_REVISION` in the environment or
+Git-ignored `.streamlit/secrets.toml`. The token is passed to the Hub client
+only; do not place it in source or committed files. The revision defaults to
+`main`; a full commit SHA is preferable for reproducibility. The optional
+`PHISHGUARD_ARTIFACT_BASE_URL` setting requires HTTPS. Keep any artifact source
+private and access-controlled until provenance and licensing review is done.
 
 ### Version 2 evaluation results
 
-Version 2 SVM accuracy was **98.67%** on its held-out test split (5,254 emails,
-from 17,513 cleaned records). This is performance on that dataset and split,
-not guaranteed real-world accuracy or a promise of performance on new email.
-The saved report also records weighted precision, recall, and F1 of about
-98.67%, phishing-class precision of 98.76%, phishing recall of 97.65%, 24 false
-positives, and 46 false negatives.
+These are **original-dataset benchmark results**, not estimates of guaranteed
+real-world performance. Version 1's SVM achieved **97.93% accuracy** on 5,591
+held-out emails from 18,634 records (stratified 70/30 split, seed 42); it
+recorded 81 false positives and 35 false negatives. Version 2's SVM achieved
+**98.67% accuracy** on 5,254 held-out emails from 17,513 cleaned records
+(stratified 70/30 split, seed 42); it recorded 24 false positives and 46 false
+negatives, with phishing precision 98.76% and recall 97.65%.
 
 Version 1 and Version 2 results are **not directly comparable**: Version 2
 removes missing, placeholder, duplicate, and conflicting-label data before
 splitting, so its held-out test dataset differs from Version 1's. See the
 locally generated `results/metrics.json` and `results/cleaned/metrics.json`
 for the respective full reports.
+
+The separate near-duplicate-grouped Version 2/3 experiment used the same
+group-safe training and test examples for both models, with no similarity
+group crossing the split. On that held-out partition, both models achieved
+98.55% accuracy. Version 2 recorded 31 false positives and 45 false negatives;
+experimental Version 3 recorded 27 false positives and 49 false negatives.
+This is one dataset partition and is not evidence of a general performance
+improvement. Version 3 remains experimental and is not selectable in Streamlit.
+
+### Synthetic challenge results (not research benchmarks)
+
+Synthetic challenge figures are **not real-world detection accuracy** and are
+kept separate from the original-dataset benchmark:
+
+- On the 40-message fictional challenge, saved grouped Version 2 and Version 3
+  each achieved 57.5% accuracy and 35% phishing recall, with 4 false positives
+  and 13 false negatives. The hand-authored set is small and tests selected
+  scenarios only.
+- On the independent 60-message fictional challenge (30 phishing, 30
+  legitimate), the pre-QR-refinement indicator report recorded 20 true
+  positives, 2 false positives, 28 true negatives, and 10 false negatives.
+  The grouped Version 2 model recorded 14 true positives, 6 false positives,
+  24 true negatives, and 16 false negatives; grouped Version 3 recorded 11,
+  6, 24, and 19 respectively.
+- A subsequent QR-rule refinement eliminated both previously identified
+  legitimate QR-payment alerts on that frozen challenge while retaining all
+  20 previously detected phishing messages. The combined Version 2 OR
+  indicator outcome was 28 true positives, 6 false positives, 24 true
+  negatives, and 2 false negatives. These are challenge-set observations only;
+  the set is synthetic, small, and hand-authored.
+
+Do not interpret synthetic results as population-level performance. The
+fictional text and reserved domains do not represent the variability of real
+mail, and scenario-level counts are small. The indicator rules are also
+limited to explicitly configured text patterns.
 
 ## Security Risk Indicators and limitations
 
