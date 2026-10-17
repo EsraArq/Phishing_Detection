@@ -145,6 +145,34 @@ to Git-ignored `results/v3/experiment/` and `models/v3/experiment/`
 directories. The report contains no email examples or per-message
 identifiers.
 
+## Synthetic Version 2/3 challenge evaluation
+
+Evaluate the existing grouped Version 2 and Version 3 models against 40
+fictional, labeled messages without retraining:
+
+```bash
+python -m scripts.evaluate_synthetic_challenge
+```
+
+The command reconstructs the grouped training partition only to check for
+exact and normalized challenge-message duplicates. It reports aggregate
+overall and scenario metrics, disagreements, and duplicate counts only; it
+does not include message text or alter the official experiment reports. The
+challenge set is small and synthetic, so its scores are diagnostic rather than
+representative estimates of production performance. Results are stored in
+Git-ignored `results/v3/synthetic-challenge/`.
+
+An independent 60-message fictional challenge, with separate rule-based
+indicator and saved-model metrics, can be run without retraining:
+
+```bash
+python -m scripts.evaluate_independent_challenge
+```
+
+Its aggregate-only report is stored separately in
+Git-ignored `results/v3/synthetic-challenge-independent/`. It does not change
+the earlier challenge or official experiment results.
+
 Run the full unit test suite with:
 
 ```bash
@@ -247,13 +275,15 @@ for the respective full reports.
 
 ## Security Risk Indicators and limitations
 
-Security Risk Indicators are separate rule-based checks for selected requests
-to enable Office/Excel macros, disclose passwords, or enter credentials through
-links. When a rule matches, the interface displays the triggering text and an
-explanation independently of the ML label; a warning may appear even when the
-model predicts “Likely Legitimate Email.” These checks cover only configured
-patterns. No warning does not establish that a message is safe, and a warning
-is not itself a model prediction.
+Security Risk Indicators are a separate rule-based warning layer. Configured
+checks look for credential/MFA/recovery-code disclosure, QR-assisted sign-in or
+payment, active attachment instructions, payment redirection or gift-card
+requests, delivery release-fee links, and urgent account threats paired with a
+credential or payment request. Rules require combinations of context rather
+than isolated words. Warnings do not override or change the SVM classification.
+These checks cover only configured patterns and may miss novel wording or
+produce false positives. No warning does not establish that a message is safe,
+and a warning is not itself a model prediction.
 
 The text classifiers learn patterns in a labeled email corpus. They do not
 independently verify senders, inspect link destinations or attachments, or
