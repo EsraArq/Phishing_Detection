@@ -117,6 +117,34 @@ that every identifier is removed, and masking can affect phishing-detection
 performance; the separate Version 3 training and evaluation plan must measure
 both before any model is produced.
 
+The separate near-duplicate-grouped comparison uses deterministic MinHash
+candidate grouping followed by exact shingle-Jaccard verification, then selects
+a seeded, class-balanced group holdout. It does not fit a vectorizer to
+held-out data during similarity grouping:
+
+```bash
+python -m scripts.experiment_v3_grouped
+```
+
+This writes new artifacts under Git-ignored `models/v3/grouped-experiment/`
+and `results/v3/grouped-experiment/`; it preserves the earlier Version 3
+experiment directory.
+
+To run the controlled Version 2 versus Version 3 SVM experiment against the
+existing dataset, use:
+
+```bash
+python -m scripts.experiment_v3
+```
+
+The experiment checks and removes conflicting-label and normalized duplicate
+groups before making one stratified 70/30 split (seed 42). Both fresh SVMs use
+the same training examples and parameters; Version 3 masking runs inside its
+saved prediction pipeline. Aggregate metrics and both models are written only
+to Git-ignored `results/v3/experiment/` and `models/v3/experiment/`
+directories. The report contains no email examples or per-message
+identifiers.
+
 Run the full unit test suite with:
 
 ```bash

@@ -112,6 +112,13 @@ class Version3PreprocessingTests(unittest.TestCase):
 
         self.assertEqual(masked, source)
 
+    def test_masks_malformed_bracketed_ip_url_without_failing(self):
+        masked = mask_sensitive_information("Visit https://[1:2:3:4:5:6:7:8:9]/login now.")
+
+        self.assertIn("pii_url", masked)
+        self.assertIn("visit", masked.casefold())
+        self.assertIn("now", masked.casefold())
+
     def test_tfidf_tokenizer_keeps_category_markers_as_single_features(self):
         vectorizer = build_v3_tfidf_vectorizer()
         vectors = vectorizer.fit_transform(

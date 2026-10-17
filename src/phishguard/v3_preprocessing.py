@@ -2,6 +2,7 @@
 
 import ipaddress
 import re
+from collections.abc import Iterable
 from urllib.parse import urlsplit
 
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -93,7 +94,10 @@ def _mask_url(match: re.Match[str]) -> str:
     if _URL_DEFANGED_PATTERN.match(masked_url):
         markers.append("pii_url_defanged")
 
-    hostname = urlsplit(normalized_url).hostname
+    try:
+        hostname = urlsplit(normalized_url).hostname
+    except ValueError:
+        hostname = None
     if hostname:
         try:
             ipaddress.ip_address(hostname)
@@ -155,6 +159,11 @@ def mask_sensitive_information(text: str) -> str:
     masked = _IPV4_CANDIDATE_PATTERN.sub(_mask_ip_candidate, masked)
     masked = _IPV6_CANDIDATE_PATTERN.sub(_mask_ip_candidate, masked)
     return _PHONE_PATTERN.sub(_mask_phone, masked)
+
+
+def mask_email_batch(texts: Iterable[str]) -> list[str]:
+    """Mask a batch of email texts for use within a scikit-learn pipeline."""
+    return [mask_sensitive_information(text) for text in texts]
 
 
 def build_v3_tfidf_vectorizer() -> TfidfVectorizer:
